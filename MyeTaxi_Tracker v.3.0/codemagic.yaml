@@ -1,0 +1,263 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MyeTaxi Tracker v1.0 — Codemagic CI/CD Configuration
+# Builds: Android APK + AAB  |  iOS IPA  |  Web PWA
+#
+# SETUP: https://codemagic.io
+# 1. Create account at codemagic.io
+# 2. Connect GitHub repo → New application → Flutter App
+# 3. Choose "Use codemagic.yaml" configuration
+# 4. Add environment variables in Codemagic UI (see variables section below)
+# ─────────────────────────────────────────────────────────────────────────────
+
+workflows:
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  WORKFLOW 1 — ANDROID APK + AAB
+# ══════════════════════════════════════════════════════════════════════════════
+  android-release:
+    name: Android — APK & AAB Release
+    max_build_duration: 60    # minutes
+    instance_type: mac_mini_m2
+
+    # ── Trigger ───────────────────────────────────────────────────────────────
+    triggering:
+      events:
+        - push
+        - tag
+        - pull_request
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+        - pattern: 'release/*'
+          include: true
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+
+    # ── Environment Variables ─────────────────────────────────────────────────
+    # Add these in Codemagic UI → App settings → Environment variables
+    environment:
+      flutter: 3.19.0
+      java: 17
+      vars:
+        APP_NAME: "MyeTaxi Tracker"
+        PACKAGE_NAME: "com.myetaxi.tracker"
+        # Add these in Codemagic UI as SECURE variables:
+        # GOOGLE_MAPS_API_KEY          — your Google Maps key
+        # FIREBASE_ANDROID_JSON        — paste full google-services.json content
+        # CM_KEYSTORE_PASSWORD         — keystore password (for signed release)
+        # CM_KEY_ALIAS                 — key alias
+        # CM_KEY_PASSWORD              — key password
+      # For signed release builds, add keystore in Codemagic UI:
+      # android_signing:
+      #   - myetaxi_keystore
+
+    # ── Build Scripts ─────────────────────────────────────────────────────────
+    scripts:
+      - name: 🔥 Inject Firebase google-services.json
+        script: |
+          if [ -n "$FIREBASE_ANDROID_JSON" ]; then
+            echo "$FIREBASE_ANDROID_JSON" > "$CM_BUILD_DIR/android/app/google-services.json"
+            echo "✅ google-services.json injected"
+          else
+            echo "⚠️  Using placeholder google-services.json"
+          fi
+
+      - name: 🗺️ Inject Google Maps API Key
+        script: |
+          if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+            sed -i "s/YOUR_GOOGLE_MAPS_API_KEY_HERE/$GOOGLE_MAPS_API_KEY/g" \
+              "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
+            echo "✅ Google Maps API key injected"
+          fi
+
+      - name: 📦 Get Flutter packages
+        script: flutter pub get
+
+      - name: 🔍 Analyze code
+        script: flutter analyze --no-fatal-infos || true
+
+      - name: 🧪 Run unit tests
+        script: flutter test || true
+
+      - name: 🔨 Build DEBUG APK
+        script: |
+          flutter build apk \
+            --debug \
+            --build-name="1.0.$BUILD_NUMBER" \
+            --build-number=$BUILD_NUMBER
+
+      - name: 🚀 Build RELEASE APK
+        script: |
+          flutter build apk \
+            --release \
+            --no-shrink \
+            --build-name="1.0.$BUILD_NUMBER" \
+            --build-number=$BUILD_NUMBER
+
+      - name: 📦 Build App Bundle (Play Store)
+        script: |
+          flutter build appbundle \
+            --release \
+            --build-name="1.0.$BUILD_NUMBER" \
+            --build-number=$BUILD_NUMBER
+
+      - name: 📝 Rename output files
+        script: |
+          cd "$CM_BUILD_DIR/build/app/outputs/flutter-apk"
+          mv app-debug.apk   "MyeTaxiTracker-v1.0.${BUILD_NUMBER}-debug.apk"   || true
+          mv app-release.apk "MyeTaxiTracker-v1.0.${BUILD_NUMBER}-release.apk" || true
+          echo "📱 APK files:"
+          ls -lh *.apk
+
+    # ── Artifacts (files to download after build) ─────────────────────────────
+    artifacts:
+      - build/app/outputs/flutter-apk/MyeTaxiTracker-*-release.apk
+      - build/app/outputs/flutter-apk/MyeTaxiTracker-*-debug.apk
+      - build/app/outputs/bundle/release/app-release.aab
+      - flutter_drive.log
+
+    # ── Email notification when build completes ───────────────────────────────
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com    # ← Replace with your email
+        notify:
+          success: true
+          failure: true
+      # Uncomment to publish to Google Play (needs service account JSON):
+      # google_play:
+      #   credentials: $GPLAY_SERVICE_ACCOUNT_JSON
+      #   track: internal
+      #   submit_as_draft: true
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  WORKFLOW 2 — iOS IPA
+# ══════════════════════════════════════════════════════════════════════════════
+  ios-release:
+    name: iOS — IPA Release
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+
+    environment:
+      flutter: 3.19.0
+      xcode: latest
+      cocoapods: default
+      vars:
+        APP_NAME: "MyeTaxi Tracker"
+        BUNDLE_ID: "com.myetaxi.tracker"
+      # For signed IPA add in Codemagic UI:
+      # ios_signing:
+      #   distribution_type: app_store  # or: ad_hoc / development
+      #   bundle_identifier: com.myetaxi.tracker
+
+    scripts:
+      - name: 🔥 Inject Firebase GoogleService-Info.plist
+        script: |
+          if [ -n "$FIREBASE_IOS_PLIST" ]; then
+            echo "$FIREBASE_IOS_PLIST" > "$CM_BUILD_DIR/ios/Runner/GoogleService-Info.plist"
+          fi
+
+      - name: 📦 Get Flutter packages
+        script: flutter pub get
+
+      - name: 🍫 Install CocoaPods
+        script: |
+          cd ios && pod install --repo-update
+        working_directory: $CM_BUILD_DIR
+
+      - name: 🔨 Build iOS (no codesign)
+        script: |
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --build-name="1.0.$BUILD_NUMBER" \
+            --build-number=$BUILD_NUMBER
+
+      - name: 📱 Package as IPA
+        script: |
+          cd "$CM_BUILD_DIR"
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r "MyeTaxiTracker-v1.0.${BUILD_NUMBER}.ipa" Payload
+          rm -rf Payload
+
+    artifacts:
+      - MyeTaxiTracker-*.ipa
+
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true
+          failure: true
+      # Uncomment for TestFlight publishing:
+      # app_store_connect:
+      #   api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+      #   key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+      #   issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+      #   submit_to_testflight: true
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  WORKFLOW 3 — WEB / PWA
+# ══════════════════════════════════════════════════════════════════════════════
+  web-pwa:
+    name: Web — PWA Build
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+
+    environment:
+      flutter: 3.19.0
+
+    scripts:
+      - name: 📦 Get Flutter packages
+        script: flutter pub get
+
+      - name: 🌐 Build Web PWA
+        script: |
+          flutter build web \
+            --release \
+            --web-renderer canvaskit \
+            --build-name="1.0.$BUILD_NUMBER" \
+            --build-number=$BUILD_NUMBER
+
+      - name: 📦 Zip web output
+        script: |
+          cd build
+          zip -r "../MyeTaxiTracker-v1.0.${BUILD_NUMBER}-web-pwa.zip" web/
+
+    artifacts:
+      - MyeTaxiTracker-*-web-pwa.zip
+
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true
+          failure: false
+      # Uncomment to deploy to Firebase Hosting:
+      # firebase:
+      #   firebase_token: $FIREBASE_TOKEN
+      #   project: myetaxi-tracker
+      #   hosting:
+      #     site: myetaxi-tracker
+      #     upload_paths:
+      #       - build/web
