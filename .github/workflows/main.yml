@@ -33,6 +33,14 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Fix telephony namespace
+        run: |
+          TELEPHONY_BUILD=$(find ~/.pub-cache -path "*/telephony*/android/build.gradle" | head -1)
+          if [ -n "$TELEPHONY_BUILD" ]; then
+            sed -i "s/android {/android {\n    namespace 'com.shounakmulay.telephony'/" "$TELEPHONY_BUILD"
+            echo "Patched: $TELEPHONY_BUILD"
+          fi
+
       - name: Build APK
         run: flutter build apk --release
 
