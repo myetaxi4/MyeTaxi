@@ -9,7 +9,7 @@ on:
 
 defaults:
   run:
-    working-directory: ./your_flutter_folder
+    working-directory: "./MyeTaxi_Tracker v.3.0"
 
 jobs:
   build:
@@ -40,4 +40,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
-          path: ./your_flutter_folder/build/app/outputs/flutter-apk/app-release.apk
+          path: "MyeTaxi_Tracker v.3.0/build/app/outputs/flutter-apk/app-release.apk"
