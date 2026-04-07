@@ -1,43 +1,38 @@
 name: Build APK
-
+ 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
-
+ 
 defaults:
   run:
     working-directory: "./MyeTaxi_Tracker v.3.0"
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+ 
     steps:
       - uses: actions/checkout@v4
-
+ 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
-
+ 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.0'
           channel: 'stable'
-
-      - name: Force compileSdk 35
-        run: |
-          sed -i 's/compileSdkVersion 34/compileSdkVersion 35/' android/app/build.gradle
-          sed -i 's/targetSdkVersion 34/targetSdkVersion 35/' android/app/build.gradle
-
+ 
       - name: Get dependencies
         run: flutter pub get
-
+ 
       - name: Fix telephony namespace
         run: |
           TELEPHONY_BUILD=$(find ~/.pub-cache -path "*/telephony*/android/build.gradle" | head -1)
@@ -45,18 +40,10 @@ jobs:
             sed -i "s/android {/android {\n    namespace 'com.shounakmulay.telephony'/" "$TELEPHONY_BUILD"
             echo "Patched: $TELEPHONY_BUILD"
           fi
-
-      - name: Fix flutter_local_notifications ambiguity
-        run: |
-          FLN_FILE=$(find ~/.pub-cache -path "*/flutter_local_notifications*/FlutterLocalNotificationsPlugin.java" | head -1)
-          if [ -n "$FLN_FILE" ]; then
-            sed -i 's/bigPictureStyle\.bigLargeIcon(null)/bigPictureStyle.bigLargeIcon((android.graphics.Bitmap) null)/' "$FLN_FILE"
-            echo "Patched: $FLN_FILE"
-          fi
-
+ 
       - name: Build APK
         run: flutter build apk --release
-
+ 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
