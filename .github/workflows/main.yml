@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+defaults:
+  run:
+    working-directory: ./your_flutter_folder
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,4 +40,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: ./your_flutter_folder/build/app/outputs/flutter-apk/app-release.apk
