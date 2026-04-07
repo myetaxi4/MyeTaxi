@@ -1,36 +1,65 @@
-# This is a basic workflow to help you get started with Actions
-
-name: CI
-
-# Controls when the workflow will run
+name: Build APK
+ 
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    branches: [main]
   workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+ 
+defaults:
+  run:
+    working-directory: "./MyeTaxi_Tracker v.3.0"
+ 
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+ 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
-
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+ 
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+ 
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.0'
+          channel: 'stable'
+ 
+      - name: Fix compileSdk and targetSdk to 35
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          sed -i 's/compileSdkVersion 34/compileSdkVersion 35/' android/app/build.gradle
+          sed -i 's/targetSdkVersion 34/targetSdkVersion 35/' android/app/build.gradle
+ 
+      - name: Upgrade flutter_local_notifications
+        run: |
+          sed -i 's/flutter_local_notifications: ^16.3.2/flutter_local_notifications: ^18.0.0/' pubspec.yaml
+ 
+      - name: Fix notification_service Color conflict
+        run: |
+          sed -i "1s|^|import 'dart:ui' show Color;\n|" lib/services/notification_service.dart
+          sed -i '/^\/\/ Needed for color/,/^}$/d' lib/services/notification_service.dart
+ 
+      - name: Get dependencies
+        run: flutter pub get
+ 
+      - name: Fix telephony namespace
+        run: |
+          TELEPHONY_BUILD=$(find ~/.pub-cache -path "*/telephony*/android/build.gradle" | head -1)
+          if [ -n "$TELEPHONY_BUILD" ]; then
+            sed -i "s/android {/android {\n    namespace 'com.shounakmulay.telephony'/" "$TELEPHONY_BUILD"
+            echo "Patched: $TELEPHONY_BUILD"
+          fi
+ 
+      - name: Build APK
+        run: flutter build apk --release
+ 
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: "MyeTaxi_Tracker v.3.0/build/app/outputs/flutter-apk/app-release.apk"
